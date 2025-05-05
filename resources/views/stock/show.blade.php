@@ -10,7 +10,8 @@
 @if($lastDoc)
     <div class="alert alert-info">
         <strong>Dernier Achat :</strong> {{ \Carbon\Carbon::parse($lastDoc->cbCreation)->format('d/m/Y') }}<br>
-        <strong>Quantité :</strong> {{ number_format($lastDoc->DL_Qte, 0, ',', ' ') }}
+        <strong>Quantité :</strong> {{ number_format($lastDoc->DL_Qte, 0, ',', ' ') }} <br>
+        <strong>CMUP :</strong> {{ number_format($lastDoc->DL_CMUP, 0, ',', ' ') }}
     </div>
 @endif
     <div class="card">

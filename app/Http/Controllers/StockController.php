@@ -151,7 +151,7 @@ class StockController extends Controller
             ->get();
 
             $lastDoc = DB::table('CSTOCK21BME.dbo.F_DOCLIGNE')
-            ->select('cbCreation', 'DL_Qte')
+            ->select('cbCreation', 'DL_Qte','DL_CMUP')
             ->where('AR_Ref', $ref)
             ->whereIn('DO_Type', [16, 17])
             ->orderByDesc('cbCreation')
