@@ -41,6 +41,7 @@
                             <th>Quantité</th>
                             <th>Prix Achat</th>
                             <th>Prix Vente</th>
+                            <th>Détails</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -58,6 +59,8 @@
                                 <td>{{ number_format($article->Qte, 0, ',', ' ') }}</td>
                                 <td>{{ number_format($article->AR_PrixAch, 0, ',', ' ') }}</td>
                                 <td>{{ number_format($article->AR_PrixVen, 0, ',', ' ') }}</td>
+                                <td><a href="{{ route('stock.show', $article->AR_Ref) }}" class="btn btn-sm btn-info">Détails</a></td>
+
                             </tr>
                         @empty
                             <tr>

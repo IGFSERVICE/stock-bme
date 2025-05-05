@@ -89,37 +89,73 @@ class StockController extends Controller
         return redirect()->route('stock.index')->with('success', 'Articles marqués comme en rupture.');
     }
 
+    public function ruptures(Request $request)
+    {
+        // Récupérer les dates du filtre
+        $dateDebut = $request->input('date_debut');
+        $dateFin = $request->input('date_fin');
+    
+        $query = DB::table('rupture');
+    
+        if ($dateDebut && $dateFin) {
+            $query->whereBetween('date_rupture', [$dateDebut, $dateFin]);
+        } elseif ($dateDebut) {
+            $query->where('date_rupture', '>=', $dateDebut);
+        } elseif ($dateFin) {
+            $query->where('date_rupture', '<=', $dateFin);
+        }
+    
+        $ruptures = $query->paginate(15);
+    
+        return view('stock.ruptures', compact('ruptures'));
+    }
+    
+
     public function export()
     {
         return Excel::download(new StockExport, 'stock_articles.xlsx');
     }
+
     public function exportRuptures(Request $request)
-{
-    $dateDebut = $request->input('date_debut');
-    $dateFin = $request->input('date_fin');
+    {
+        $dateDebut = $request->input('date_debut');
+        $dateFin = $request->input('date_fin');
 
-    return Excel::download(new RupturesExport($dateDebut, $dateFin), 'ruptures_articles.xlsx');
-}
-
-    public function ruptures(Request $request)
-{
-    // Récupérer les dates du filtre
-    $dateDebut = $request->input('date_debut');
-    $dateFin = $request->input('date_fin');
-
-    $query = DB::table('rupture');
-
-    if ($dateDebut && $dateFin) {
-        $query->whereBetween('date_rupture', [$dateDebut, $dateFin]);
-    } elseif ($dateDebut) {
-        $query->where('date_rupture', '>=', $dateDebut);
-    } elseif ($dateFin) {
-        $query->where('date_rupture', '<=', $dateFin);
+        return Excel::download(new RupturesExport($dateDebut, $dateFin), 'ruptures_articles.xlsx');
     }
 
-    $ruptures = $query->paginate(15);
+    public function show($ref)
+    {
+        $excludedDepots = [
+            '6', '32', '119', '120', '121', '122', '123', '124', '125', '126', '127',
+            '130', '131', '132', '133', '134', '135', '136', '137', '138', '139',
+            '140', '142', '145', '150', '154', '162', '165', '166', '167', '168',
+            '169', '170', '171', '172', '173', '174', '179', '191', '193', '194',
+            '195', '196', '197', '198', '199', '200', '202', '203', '204', '205',
+            '206', '207', '208', '209', '210', '211', '212', '213', '214', '215',
+            '216', '217', '218', '219', '220', '221', '222', '223', '224', '225',
+            '226', '231', '232', '233', '237', '240', '241', '242', '243', '244',
+            '245', '246', '247', '248', '249', '251', '254', '255', '256', '257',
+        ];
 
-    return view('stock.ruptures', compact('ruptures'));
-}
+        $articles = DB::table('cstock21bme.dbo.f_artstock as a')
+            ->join('cstock21bme.dbo.F_DEPOT as d', 'a.DE_No', '=', 'd.DE_No')
+            ->select(
+                'a.AR_Ref',
+                'a.DE_No',
+                'a.AS_QteSto',
+                'd.DE_Intitule'
+            )
+            ->where('a.AR_Ref', $ref)
+            ->whereNotIn('a.DE_No', $excludedDepots)
+            ->get();
 
+            $lastDoc = DB::table('CSTOCK21BME.dbo.F_DOCLIGNE')
+            ->select('cbCreation', 'DL_Qte')
+            ->where('AR_Ref', $ref)
+            ->whereIn('DO_Type', [16, 17])
+            ->orderByDesc('cbCreation')
+            ->first();
+        return view('stock.show', compact('articles','lastDoc'));
+    }
 }

@@ -13,4 +13,6 @@ Route::post('/stock/rupture', [StockController::class, 'markRupture'])->name('st
 Route::get('/stock/export', [StockController::class, 'export'])->name('stock.export');
 Route::get('/ruptures/export', [StockController::class, 'exportRuptures'])->name('stock.exportRuptures');
 Route::get('/ruptures', [StockController::class, 'ruptures'])->name('stock.ruptures');
+Route::get('/stock/{ref}', [StockController::class, 'show'])->name('stock.show');
+
 
