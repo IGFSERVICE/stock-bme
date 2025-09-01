@@ -327,16 +327,21 @@ return [
         //     'label' => 4,
         //     'label_color' => 'success',
         // ],
-        ['header' => 'account_settings'],
+        ['header' => 'MENUs'],
         [
             'text' => 'Articles',
             'url' => 'stock',
             'icon' => 'fas fa-fw fa-spinner',
         ],
-        [
-            'text' => 'Ruptures',
-            'url' => 'ruptures',
+         [
+            'text' => 'Ruptures Actuelles',
+            'url' => 'ruptures-actuel',
             'icon' => 'fa fa-ban',
+        ],
+        [
+            'text' => 'Historiques Ruptures',
+            'url' => 'ruptures',
+            'icon' => '',
         ],
         // [
         //     'text' => 'multilevel',

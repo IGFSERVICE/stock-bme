@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Exports\StockExport;
 use Illuminate\Http\Request;
 use App\Exports\RupturesExport;
+use App\Exports\RupturesActuelExport;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Pagination\LengthAwarePaginator;
 use JeroenNoten\LaravelAdminLte\Http\Controllers\Controller;
 
 class StockController extends Controller
@@ -36,8 +38,15 @@ class StockController extends Controller
                          ->where('archived', 0);
             });
 
-        if (!empty($reference)) {
-            $query->where('AR_Design', 'like', '%' . $reference . '%');
+            if (!empty($reference)) {
+            // On découpe les mots saisis par espace
+            $keywords = explode(' ', $reference);
+
+            $query->where(function($q) use ($keywords) {
+                foreach ($keywords as $word) {
+                    $q->where('AR_Design', 'like', '%' . $word . '%');
+                }
+            });
         }
 
         if ($qteFilter === 'positif') {
@@ -57,7 +66,7 @@ class StockController extends Controller
             $query->orderBy('Qte', 'asc'); // tri par défaut si aucun tri demandé
         }
 
-        $articles = $query->paginate(15);
+        $articles = $query->paginate(15)->appends($request->all());
 
         return view('stock.index', compact('articles'));
     }
@@ -89,28 +98,74 @@ class StockController extends Controller
         return redirect()->route('stock.index')->with('success', 'Articles marqués comme en rupture.');
     }
 
-    public function ruptures(Request $request)
+   public function ruptures(Request $request)
+{
+    // Récupérer les dates du filtre
+    $dateDebut = $request->input('date_debut');
+    $dateFin = $request->input('date_fin');
+
+    // Construire la requête de base
+    $query = DB::table('rupture')->where('archived', 0);
+
+    // Appliquer les filtres de date si présents
+    if ($dateDebut && $dateFin) {
+        $query->whereBetween('date_rupture', [$dateDebut, $dateFin]);
+    } elseif ($dateDebut) {
+        $query->where('date_rupture', '>=', $dateDebut);
+    } elseif ($dateFin) {
+        $query->where('date_rupture', '<=', $dateFin);
+    }
+
+    // Exécuter la requête avec pagination
+    $ruptures = $query->paginate(15)->appends($request->all());
+
+    // Retourner la vue avec les résultats
+    return view('stock.ruptures', compact('ruptures'));
+}
+
+    
+	  public function rupturesActuel(Request $request)
     {
-        // Récupérer les dates du filtre
         $dateDebut = $request->input('date_debut');
         $dateFin = $request->input('date_fin');
-    
-        $query = DB::table('rupture');
-    
-        if ($dateDebut && $dateFin) {
-            $query->whereBetween('date_rupture', [$dateDebut, $dateFin]);
-        } elseif ($dateDebut) {
-            $query->where('date_rupture', '>=', $dateDebut);
-        } elseif ($dateFin) {
-            $query->where('date_rupture', '<=', $dateFin);
-        }
-    
-        $ruptures = $query->paginate(15);
-    
-        return view('stock.ruptures', compact('ruptures'));
-    }
-    
 
+        // Exécution de la fonction SQL
+        $results = DB::select('SELECT * FROM [dbo].[fn_GetRupturekArticles]()');
+
+        // Transformer en collection Laravel
+        $ruptures = collect($results);
+
+        // Filtrage en PHP si dates fournies
+        if ($dateDebut) {
+            $ruptures = $ruptures->filter(function ($item) use ($dateDebut) {
+                return $item->date_rupture >= $dateDebut;
+            });
+        }
+
+        if ($dateFin) {
+            $ruptures = $ruptures->filter(function ($item) use ($dateFin) {
+                return $item->date_rupture <= $dateFin;
+            });
+        }
+
+        // Re-indexer après filtrage
+        $ruptures = $ruptures->values();
+
+        // Pagination manuelle
+        $perPage = 15;
+        $currentPage = LengthAwarePaginator::resolveCurrentPage();
+        $currentPageItems = $ruptures->slice(($currentPage - 1) * $perPage, $perPage)->values();
+
+        $paginatedRuptures = new LengthAwarePaginator(
+            $currentPageItems,
+            $ruptures->count(),
+            $perPage,
+            $currentPage,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        return view('stock.ruptures_actuel', ['ruptures' => $paginatedRuptures]);
+    }
     public function export()
     {
         return Excel::download(new StockExport, 'stock_articles.xlsx');
@@ -122,6 +177,11 @@ class StockController extends Controller
         $dateFin = $request->input('date_fin');
 
         return Excel::download(new RupturesExport($dateDebut, $dateFin), 'ruptures_articles.xlsx');
+    }
+
+     public function rupturesActuelExport()
+    {
+        return Excel::download(new RupturesActuelExport, 'Ruprures_actuelles.xlsx');
     }
 
     public function show($ref)
@@ -136,6 +196,7 @@ class StockController extends Controller
             '216', '217', '218', '219', '220', '221', '222', '223', '224', '225',
             '226', '231', '232', '233', '237', '240', '241', '242', '243', '244',
             '245', '246', '247', '248', '249', '251', '254', '255', '256', '257',
+            '201','143','129','268','131','264'
         ];
 
         $articles = DB::table('cstock21bme.dbo.f_artstock as a')
@@ -157,5 +218,57 @@ class StockController extends Controller
             ->orderByDesc('cbCreation')
             ->first();
         return view('stock.show', compact('articles','lastDoc'));
+    }
+
+      public function indexMBoup(Request $request)
+    {
+        // Exécuter la procédure pour mettre à jour historique_stock
+        DB::statement('EXEC dbo.sp_InsertStockHistorique');
+
+        // Archiver en 1 seul UPDATE tous les articles réapprovisionnés
+        DB::update("
+            UPDATE rupture
+            SET archived = 1
+            FROM rupture r
+            JOIN historique_stock h ON r.AR_Ref = h.AR_Ref
+            WHERE h.Qte > 0 AND r.archived = 0
+        ");
+
+        // Filtres
+        $reference = $request->input('reference');
+        $qteFilter = $request->input('qte');
+
+        $query = DB::table('historique_stock')
+            ->whereNotIn('AR_Ref', function($subQuery) {
+                $subQuery->select('AR_Ref')
+                         ->from('rupture')
+                         ->where('archived', 0);
+            });
+
+        if (!empty($reference)) {
+            $query->where('AR_Design', 'like', '%' . $reference . '%');
+        }
+		
+
+        if ($qteFilter === 'positif') {
+            $query->where('Qte', '>=', 0);
+        }  elseif ($qteFilter === 'zero') {
+            $query->where('Qte', '=', 0);
+        }
+        // elseif ($qteFilter === 'negatif') {
+        //     $query->where('Qte', '<', 0);
+        // }
+
+        if (request('sort') == 'asc') {
+            $query->orderBy('Qte', 'asc');
+        } elseif (request('sort') == 'desc') {
+            $query->orderBy('Qte', 'desc');
+        } else {
+            $query->orderBy('Qte', 'asc'); // tri par défaut si aucun tri demandé
+        }
+
+        $articles = $query->paginate(15)->appends($request->all());
+
+        return view('stock.mboup', compact('articles'));
     }
 }
